@@ -1,191 +1,262 @@
+# UI/pages/logs_page.py
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                             QLabel, QPushButton, QFrame, QTextEdit, QScrollArea)
-from PyQt6.QtCore import Qt
+                             QLabel, QPushButton, QFrame, QTextEdit, QScrollArea,
+                             QFileDialog, QMessageBox)
+from PyQt6.QtCore import Qt, QTimer, QDateTime
+from PyQt6.QtGui import QTextCursor
+import os
 
 
 class LogsPage(QWidget):
-    """Logs page - View installation logs and system activity"""
+    """Logs page - View installation and operation logs"""
 
     def __init__(self):
         super().__init__()
+        self.current_filter = "All"
+        self.log_entries = []
         self.init_ui()
+        self.load_sample_logs()
 
     def init_ui(self):
         """Initialize the logs page UI"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 40, 40, 40)
-        layout.setSpacing(25)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(40, 40, 40, 40)
+        self.main_layout.setSpacing(25)
 
         # Page title and description
-        title = QLabel("System Logs")
+        title = QLabel("Logs")
         title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        self.main_layout.addWidget(title)
 
         desc = QLabel("View installation logs and system activity")
         desc.setObjectName("pageDescription")
-        layout.addWidget(desc)
+        self.main_layout.addWidget(desc)
 
-        # Control buttons
+        # Control buttons row
         controls = self.create_controls()
-        layout.addWidget(controls)
+        self.main_layout.addWidget(controls)
 
-        # Recent activity summary
-        recent_activity = self.create_recent_activity()
-        layout.addWidget(recent_activity)
+        # Activity stats cards
+        stats = self.create_activity_stats()
+        self.main_layout.addWidget(stats)
 
         # Log viewer
         log_viewer = self.create_log_viewer()
-        layout.addWidget(log_viewer)
+        self.main_layout.addWidget(log_viewer)
 
     def create_controls(self):
-        """Create control buttons for log management"""
-        controls_container = QWidget()
-        controls_layout = QHBoxLayout(controls_container)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(10)
+        """Create control buttons row"""
+        controls = QWidget()
+        layout = QHBoxLayout(controls)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
 
         # Refresh button
         refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.setObjectName("controlButton")
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self.refresh_logs)
+        layout.addWidget(refresh_btn)
 
-        # Clear logs button
-        clear_btn = QPushButton("🗑️ Clear Logs")
+        # Clear button
+        clear_btn = QPushButton("🗑 Clear Logs")
         clear_btn.setObjectName("controlButton")
         clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        clear_btn.clicked.connect(self.clear_logs)
+        layout.addWidget(clear_btn)
 
         # Export button
-        export_btn = QPushButton("📥 Export Logs")
+        export_btn = QPushButton("📤 Export")
         export_btn.setObjectName("controlButton")
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_btn.clicked.connect(self.export_logs)
+        layout.addWidget(export_btn)
 
-        controls_layout.addWidget(refresh_btn)
-        controls_layout.addWidget(clear_btn)
-        controls_layout.addWidget(export_btn)
-        controls_layout.addStretch()
+        layout.addStretch()
 
-        return controls_container
+        return controls
 
-    def create_recent_activity(self):
-        """Create recent activity summary cards"""
-        activity_container = QWidget()
-        grid = QGridLayout(activity_container)
-        grid.setSpacing(15)
+    def create_activity_stats(self):
+        """Create activity statistics cards"""
+        stats_container = QWidget()
+        layout = QHBoxLayout(stats_container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(15)
 
-        # Activity data: title, count, icon, color
-        activities = [
-            ("Successful Installs", "8", "✓", "#10B981"),
-            ("Failed Operations", "1", "✗", "#EF4444"),
-            ("Updates Available", "5", "↑", "#F59E0B"),
-            ("Total Actions", "24", "📊", "#3B82F6"),
+        # Stats data
+        stats_data = [
+            ("Total Operations", self.count_logs("All"), "#2563EB"),
+            ("Installations", self.count_logs("Install"), "#10B981"),
+            ("Removals", self.count_logs("Remove"), "#EF4444"),
+            ("Updates", self.count_logs("Update"), "#F59E0B"),
         ]
 
-        # Create activity cards
-        for i, (title, count, icon, color) in enumerate(activities):
-            card = self.create_activity_card(title, count, icon, color)
-            grid.addWidget(card, 0, i)
+        for title, count, color in stats_data:
+            card = self.create_stat_card(title, count, color)
+            layout.addWidget(card)
 
-        return activity_container
+        layout.addStretch()
+        return stats_container
 
-    def create_activity_card(self, title, count, icon, color):
-        """Create an individual activity summary card"""
+    def create_stat_card(self, title, count, color):
+        """Create a single stat card"""
         card = QFrame()
         card.setObjectName("activityCard")
 
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
+        layout.setSpacing(5)
 
-        # Icon with colored background
-        icon_label = QLabel(icon)
-        icon_label.setStyleSheet(
-            f"font-size: 24px; background-color: {color}; padding: 10px; border-radius: 6px; color: white;")
-        icon_label.setFixedSize(44, 44)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Count
-        count_label = QLabel(count)
+        count_label = QLabel(str(count))
         count_label.setObjectName("activityCount")
+        count_label.setStyleSheet(f"color: {color};")
 
-        # Title
         title_label = QLabel(title)
         title_label.setObjectName("activityTitle")
-        title_label.setWordWrap(True)
 
-        layout.addWidget(icon_label)
         layout.addWidget(count_label)
         layout.addWidget(title_label)
 
         return card
 
     def create_log_viewer(self):
-        """Create the main log viewer text area"""
+        """Create the log viewer container"""
         viewer_container = QFrame()
         viewer_container.setObjectName("logViewerContainer")
 
         layout = QVBoxLayout(viewer_container)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        # Header
+        # Header with title and filters
         header = QFrame()
         header.setObjectName("logViewerHeader")
-        header.setFixedHeight(50)
 
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 0, 20, 0)
+        header_layout.setContentsMargins(20, 15, 20, 15)
 
-        header_label = QLabel("Installation Log")
-        header_label.setObjectName("logViewerTitle")
-        header_layout.addWidget(header_label)
+        title = QLabel("📋 Activity Log")
+        title.setObjectName("logViewerTitle")
+        header_layout.addWidget(title)
 
         header_layout.addStretch()
 
         # Filter buttons
-        filter_all = QPushButton("All")
-        filter_all.setObjectName("logFilterActive")
-        filter_error = QPushButton("Errors")
-        filter_error.setObjectName("logFilter")
-        filter_warning = QPushButton("Warnings")
-        filter_warning.setObjectName("logFilter")
-        filter_info = QPushButton("Info")
-        filter_info.setObjectName("logFilter")
+        filters = ["All", "Install", "Remove", "Update", "Error"]
+        self.filter_buttons = {}
 
-        header_layout.addWidget(filter_all)
-        header_layout.addWidget(filter_error)
-        header_layout.addWidget(filter_warning)
-        header_layout.addWidget(filter_info)
+        for f in filters:
+            btn = QPushButton(f)
+            if f == "All":
+                btn.setObjectName("logFilterActive")
+            else:
+                btn.setObjectName("logFilter")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda checked, flt=f: self.on_filter_clicked(flt))
+            self.filter_buttons[f] = btn
+            header_layout.addWidget(btn)
 
         layout.addWidget(header)
 
         # Log text area
-        log_text = QTextEdit()
-        log_text.setObjectName("logTextArea")
-        log_text.setReadOnly(True)
-
-        # Sample log content
-        sample_logs = """[2026-01-12 14:32:15] [INFO] Starting Dev Manager v1.0.0
-[2026-01-12 14:32:16] [INFO] Checking system dependencies...
-[2026-01-12 14:32:17] [SUCCESS] All system dependencies satisfied
-[2026-01-12 14:33:42] [INFO] Installing package: python3.12
-[2026-01-12 14:33:45] [INFO] Downloading python3.12 (25.4 MB)...
-[2026-01-12 14:34:12] [SUCCESS] python3.12 installed successfully
-[2026-01-12 14:35:20] [INFO] Installing package: nodejs
-[2026-01-12 14:35:23] [INFO] Downloading nodejs (18.2 MB)...
-[2026-01-12 14:35:48] [SUCCESS] nodejs installed successfully
-[2026-01-12 14:36:15] [INFO] Installing package: docker
-[2026-01-12 14:36:18] [ERROR] Failed to install docker: dependency conflict
-[2026-01-12 14:36:18] [ERROR] Missing dependency: containerd.io >= 1.6.0
-[2026-01-12 14:37:05] [WARNING] 5 packages have available updates
-[2026-01-12 14:37:06] [INFO] Run 'sudo apt update && sudo apt upgrade' to update
-[2026-01-12 14:38:22] [INFO] Installing package: git
-[2026-01-12 14:38:24] [INFO] Downloading git (12.8 MB)...
-[2026-01-12 14:38:39] [SUCCESS] git installed successfully
-[2026-01-12 14:39:15] [INFO] Cleaning up temporary files...
-[2026-01-12 14:39:16] [SUCCESS] Cleanup completed
-[2026-01-12 14:39:16] [INFO] Dev Manager ready"""
-
-        log_text.setPlainText(sample_logs)
-
-        layout.addWidget(log_text)
+        self.log_text = QTextEdit()
+        self.log_text.setObjectName("logTextArea")
+        self.log_text.setReadOnly(True)
+        layout.addWidget(self.log_text)
 
         return viewer_container
+
+    def on_filter_clicked(self, filter_name):
+        """Handle filter button click"""
+        self.current_filter = filter_name
+
+        # Update button styles
+        for f, btn in self.filter_buttons.items():
+            if f == filter_name:
+                btn.setObjectName("logFilterActive")
+            else:
+                btn.setObjectName("logFilter")
+            btn.setStyle(btn.style())
+
+        self.display_logs()
+
+    def count_logs(self, log_type):
+        """Count logs of a specific type"""
+        if log_type == "All":
+            return len(self.log_entries)
+        return sum(1 for entry in self.log_entries if entry.get("type") == log_type)
+
+    def load_sample_logs(self):
+        """Load sample log entries"""
+        self.log_entries = [
+            {"timestamp": "2025-01-15 10:30:45", "type": "Install", "message": "Installed python3 successfully"},
+            {"timestamp": "2025-01-15 10:28:12", "type": "Install", "message": "Installed nodejs successfully"},
+            {"timestamp": "2025-01-15 09:45:00", "type": "Update", "message": "Updated git to version 2.43.0"},
+            {"timestamp": "2025-01-14 16:20:33", "type": "Remove", "message": "Removed vim"},
+            {"timestamp": "2025-01-14 14:15:22", "type": "Error", "message": "Failed to install docker: permission denied"},
+            {"timestamp": "2025-01-14 11:00:00", "type": "Install", "message": "Installed docker successfully"},
+        ]
+        self.display_logs()
+
+    def display_logs(self):
+        """Display logs in the text area"""
+        self.log_text.clear()
+
+        filtered = self.log_entries if self.current_filter == "All" else [
+            e for e in self.log_entries if e.get("type") == self.current_filter
+        ]
+
+        for entry in filtered:
+            timestamp = entry.get("timestamp", "")
+            log_type = entry.get("type", "Info")
+            message = entry.get("message", "")
+
+            color = {"Install": "#10B981", "Remove": "#EF4444", "Update": "#F59E0B", "Error": "#EF4444"}.get(log_type, "#8B92A8")
+
+            self.log_text.append(f'<span style="color: #6B7280;">[{timestamp}]</span> '
+                                 f'<span style="color: {color};">[{log_type}]</span> {message}')
+
+    def add_log(self, log_type, message):
+        """Add a new log entry"""
+        timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+        self.log_entries.insert(0, {"timestamp": timestamp, "type": log_type, "message": message})
+        self.display_logs()
+
+    def refresh_logs(self):
+        """Refresh the logs display"""
+        self.display_logs()
+        self.update_stats()
+
+    def update_stats(self):
+        """Update statistics cards"""
+        # Rebuild stats section
+        stats_widget = self.main_layout.itemAt(3).widget()
+        if stats_widget:
+            self.main_layout.removeWidget(stats_widget)
+            stats_widget.deleteLater()
+
+        stats = self.create_activity_stats()
+        self.main_layout.insertWidget(3, stats)
+
+    def clear_logs(self):
+        """Clear all logs"""
+        reply = QMessageBox.question(
+            self, "Clear Logs",
+            "Are you sure you want to clear all logs?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.log_entries.clear()
+            self.display_logs()
+            self.update_stats()
+
+    def export_logs(self):
+        """Export logs to a file"""
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Export Logs", "dev_manager_logs.txt", "Text Files (*.txt)"
+        )
+        if filename:
+            with open(filename, 'w') as f:
+                for entry in self.log_entries:
+                    f.write(f"[{entry['timestamp']}] [{entry['type']}] {entry['message']}\n")
+            QMessageBox.information(self, "Export", f"Logs exported to {filename}")

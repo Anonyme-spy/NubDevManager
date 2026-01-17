@@ -13,6 +13,7 @@ from pages.dev_packs_page import DevPacksPage
 from pages.aur_installer_page import AURInstallerPage
 from pages.logs_page import LogsPage
 from pages.settings_page import SettingsPage
+from core.package_manager import PackageManager
 
 
 class DevManager(QMainWindow):
@@ -20,12 +21,6 @@ class DevManager(QMainWindow):
         super().__init__()
         self.setWindowTitle("Dev Manager")
         self.setGeometry(100, 100, 1200, 700)
-
-        # Load stylesheet
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        style_path = os.path.join(script_dir, 'style.css')
-        with open(style_path, 'r') as f:
-            self.setStyleSheet(f.read())
 
         # Store reference to navigation buttons for styling
         self.nav_buttons = []
@@ -46,6 +41,8 @@ class DevManager(QMainWindow):
         # Create main content area with stacked widget
         self.content_area = self.create_content_area()
         main_layout.addWidget(self.content_area)
+
+        self.load_stylesheets()
 
 
 
@@ -166,14 +163,18 @@ class DevManager(QMainWindow):
         # Status indicators on the right
         connected = QLabel("● Connected")
         connected.setObjectName("statusConnected")
-        ubuntu = QLabel("🐧 Ubuntu 22.04")
-        ubuntu.setObjectName("statusOS")
+
+        pm = PackageManager()
+        distro_info = pm.distro
+        distro = QLabel(distro_info.get("name", "Unknown"))
+        distro.setObjectName("statusOS")
+
         settings_btn = QPushButton("⚙")
         settings_btn.setObjectName("settingsButton")
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout.addWidget(connected)
-        layout.addWidget(ubuntu)
+        layout.addWidget(distro)
         layout.addWidget(settings_btn)
 
         return header
@@ -194,3 +195,15 @@ class DevManager(QMainWindow):
 
         clicked_button.setObjectName("navButtonActive")
         clicked_button.setStyle(clicked_button.style())  # Force style refresh
+
+    def load_stylesheets(self):
+        """Load all stylesheets"""
+        styles_dir = os.path.join(os.path.dirname(__file__), 'styles')
+        combined_styles = ""
+
+        for qss_file in os.listdir(styles_dir):
+            if qss_file.endswith('.qss'):
+                with open(os.path.join(styles_dir, qss_file), 'r') as f:
+                    combined_styles += f.read() + "\n"
+
+        self.setStyleSheet(combined_styles)
